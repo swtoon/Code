@@ -572,6 +572,12 @@ def annotate_images_pygame(
                     elif event.key == pygame.K_RETURN and draw_mode == "polygon":
 
                         if len(current_polygon) >= 3:
+                            
+                            # กรณีมี class ใหม่
+                            if label_text.strip():
+                                active_class_id = get_class_id(label_text.strip())
+                                write_data_yaml(dataset_dir, class_map)
+                                label_text = ""
 
                             # ===== กรณีแก้ไข polygon ของ box เดิม =====
                             if selected_idx is not None:
