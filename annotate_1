@@ -79,10 +79,11 @@ TOOLTIP_LINES = [
     "",
     "🖼️ Images:",
     "  ← / →       : Prev / Next image",
+    "  Alt + N     : Next image",
     "",
     "🚪 Exit:",
     "  ESC         : Exit annotator",
-    "  Ctrl + H           : Toggle help",
+    "  H           : Toggle help",
 ]
 
 
@@ -368,18 +369,22 @@ def annotate_images_pygame(
     def get_class_id(name):
         if name not in class_map:
             class_map[name] = len(class_map)
-            class_map_path.write_text(json.dumps(class_map, indent=2))
+            class_map_path.write_text(
+                json.dumps(class_map, indent=2, ensure_ascii=False),
+                encoding="utf-8"
+            )
         return class_map[name]
 
     pygame.init()
+    pygame.key.start_text_input() 
     screen = pygame.display.set_mode(WINDOW_SIZE, pygame.RESIZABLE)
     win_w, win_h = WINDOW_SIZE
     pygame.display.set_caption(f"YOLO Annotation Tool [{split}]")
     clock = pygame.time.Clock()
     try:
-        font = pygame.font.SysFont("Segoe UI Emoji", 22)
+        font = pygame.font.SysFont("Tahoma", 22)
     except:
-        font = pygame.font.SysFont("Segoe UI", 22)
+        font = pygame.font.SysFont("Arial", 22)
 
 
     active_class_id = 0
@@ -511,7 +516,9 @@ def annotate_images_pygame(
                     mx, my = pygame.mouse.get_pos()
                     sidebar_x = win_w - SIDEBAR_WIDTH
 
-                    # ถ้า scroll อยู่ใน sidebar
+                    # =========================
+                    # ⭐ ถ้า scroll อยู่ใน sidebar
+                    # =========================
                     if mx > sidebar_x:
 
                         if my < win_h - 200:
@@ -521,7 +528,9 @@ def annotate_images_pygame(
                             button_scroll -= event.y * 30
                             button_scroll = max(0, min(button_scroll, button_max_scroll))
 
-                    # ถ้า scroll อยู่บนภาพ → zoom
+                    # =========================
+                    # ⭐ ถ้า scroll อยู่บนภาพ → zoom
+                    # =========================
                     else:
                         old_zoom = zoom
 
@@ -672,7 +681,7 @@ def annotate_images_pygame(
                         label_text = label_text[:-1]
 
                     else:
-                        if event.unicode.isalnum() or event.unicode in "_-":
+                        if event.unicode and event.unicode.isprintable():
                             label_text += event.unicode
 
                 # ===== START PAN =====
@@ -753,7 +762,7 @@ def annotate_images_pygame(
 
                             if mask and len(mask) >= 3:
 
-                                # ตรวจคลิกโดน vertex ก่อน
+                                # ⭐ ตรวจคลิกโดน vertex ก่อน
                                 for vidx, (vx, vy) in enumerate(mask):
                                     if abs(mx - vx) < 6 and abs(my - vy) < 6:
                                         push_undo()
@@ -817,7 +826,10 @@ def annotate_images_pygame(
                                             new_boxes.append((x, y, w, h, c, mask))
 
                                     boxes[:] = new_boxes
-                                    class_map_path.write_text(json.dumps(class_map, indent=2))
+                                    class_map_path.write_text(
+                                        json.dumps(class_map, indent=2, ensure_ascii=False),
+                                        encoding="utf-8"
+                                    )
                                     write_data_yaml(dataset_dir, class_map)
                                     active_class_id = 0
                                     selected_idx = None
@@ -882,10 +894,14 @@ def annotate_images_pygame(
                     class_dragging_scroll = False
                     button_dragging_scroll = False
 
-                # MOUSE MOTION HANDLER
+                # ======================================
+                # ⭐ MOUSE MOTION HANDLER (รวมทั้งหมด)
+                # ======================================
                 if event.type == pygame.MOUSEMOTION:
 
+                    # =========================
                     # Scrollbar Drag
+                    # =========================
                     if class_dragging_scroll and class_scrollbar_rect:
 
                         mouse_y = event.pos[1]
@@ -899,7 +915,7 @@ def annotate_images_pygame(
                         ratio = relative / bar_travel if bar_travel else 0
                         class_scroll = ratio * class_max_scroll
 
-                        continue  
+                        continue  # ⭐ กันชน logic อื่น
 
                     if button_dragging_scroll and button_scrollbar_rect:
 
@@ -917,7 +933,10 @@ def annotate_images_pygame(
 
                         continue
 
+
+                    # =========================
                     # Panning (กลางเมาส์)
+                    # =========================
                     if panning:
                         dx = event.pos[0] - pan_start[0]
                         dy = event.pos[1] - pan_start[1]
@@ -928,7 +947,10 @@ def annotate_images_pygame(
                         pan_start = event.pos
                         continue
 
+
+                    # =========================
                     # Drawing Rect
+                    # =========================
                     if drawing:
                         x1, y1 = start_pos
 
@@ -943,7 +965,10 @@ def annotate_images_pygame(
                         )
                         continue
 
+
+                    # =========================
                     # Resize Rect
+                    # =========================
                     if resizing and selected_idx is not None:
 
                         mx = (event.pos[0] - offset_x) / zoom
@@ -990,7 +1015,10 @@ def annotate_images_pygame(
 
                         continue
 
+
+                    # =========================
                     # Drag Polygon Vertex
+                    # =========================
                     if dragging_vertex and selected_idx is not None:
 
                         mx = (event.pos[0] - offset_x) / zoom
@@ -1042,7 +1070,9 @@ def annotate_images_pygame(
                     BOX_THICKNESS
                 )
 
+                # =========================
                 # DRAW SAVED POLYGON
+                # =========================
                 if mask and len(mask) >= 3:
                     scaled_mask = [
                         (px * zoom + offset_x, py * zoom + offset_y)
@@ -1061,6 +1091,7 @@ def annotate_images_pygame(
                             pygame.draw.circle(screen, (255,255,255), (int(vx), int(vy)), 5)
                 
                 # วาด resize handle (4 มุม)
+                # ===============================ห
                 if i == selected_idx:
                     for px, py in [
                         (x, y),
@@ -1100,7 +1131,7 @@ def annotate_images_pygame(
             info = font.render(f"{idx+1}/{len(image_paths)} | Boxes:{len(boxes)} | Typing:{label_text}", True, FONT_COLOR)
             screen.blit(info, (10, win_h - 28))
 
-            # Draw Sidebar Background
+            # ===== Draw Sidebar Background =====
             sidebar_x = win_w - SIDEBAR_WIDTH
 
             pygame.draw.rect(
@@ -1123,7 +1154,9 @@ def annotate_images_pygame(
             confirm_actions = draw_confirm_popup(screen, font, confirm_delete, win_w, win_h)
             exit_actions = draw_exit_popup(screen, font, confirm_exit, win_w, win_h)
 
-            # วาด POLYGON (preview)
+            # =========================
+            # DRAW CURRENT POLYGON (preview)
+            # =========================
             if draw_mode == "polygon" and len(current_polygon) >= 2:
                 scaled_preview = [
                     (px * zoom + offset_x, py * zoom + offset_y)
@@ -1138,7 +1171,7 @@ def annotate_images_pygame(
                     2
                 )
 
-            # SMOOTH CENTER BACK
+            # ===== SMOOTH CENTER BACK =====
             if smooth_centering and zoom == 1.0:
                 target_x = (win_w - SIDEBAR_WIDTH - disp_size[0]) // 2
                 target_y = (win_h - disp_size[1]) // 2
@@ -1151,13 +1184,18 @@ def annotate_images_pygame(
                     offset_y = target_y
                     smooth_centering = False
 
-            # Button Scroll Area Setup
+            # =========================
+            # ⭐ Button Scroll Area Setup
+            # =========================
+
             button_area_top = win_h - 200
             button_area_height = 180
 
             button_total_height = 4 * 40   # 4 ปุ่ม
 
-            # สร้างปุ่มใหม่
+            # =========================
+            # ⭐ สร้างปุ่มใหม่ทุก frame (รองรับ resize)
+            # =========================
             base_y = button_area_top - button_scroll
 
             btn_reset = pygame.Rect(win_w - SIDEBAR_WIDTH + 20, base_y + 20, 180, 32)
@@ -1218,6 +1256,7 @@ def annotate_images_pygame(
                         f"{cid} {xc:.6f} {yc:.6f} "
                         f"{w/disp_size[0]:.6f} {h/disp_size[1]:.6f}\n"
                     )
+
 
     return "Done"
 
