@@ -1,5 +1,6 @@
 import subprocess
 from pathlib import Path
+import torch
 
 def val_yolo_model(
     dataset_dir: {
@@ -42,6 +43,8 @@ def val_yolo_model(
 
     task = "segment" if model_path.name.endswith("-seg.pt") else "detect"
 
+    device = "0" if torch.cuda.is_available() else "cpu"
+
     cmd = [
         "yolo",
         f"task={task}",
@@ -52,10 +55,11 @@ def val_yolo_model(
         f"project={output_dir.as_posix()}",
         f"name={run_name}",
         "plots=True",
+        f"device={device}",
     ]
 
     subprocess.Popen(cmd)
-    return output_dir / run_name
+    return f"Validation started ({device}) → {output_dir / run_name}"
 
 
 main_callable = val_yolo_model
