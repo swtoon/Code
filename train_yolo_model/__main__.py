@@ -1,5 +1,6 @@
 import subprocess
 from pathlib import Path
+import torch
 
 def train_yolo_model(
     dataset_dir: {
@@ -29,21 +30,24 @@ def train_yolo_model(
     if not data_yaml.exists():
         return "data.yaml not found"
 
+    device = "0" if torch.cuda.is_available() else "cpu"
+
     cmd = [
         "yolo",
         "segment",
         "train",
-        f"model=yolov8n-seg.pt",   # เป็น seg
+        f"model={model}",
         f"data={data_yaml.as_posix()}",
         f"epochs={epochs}",
         f"imgsz={imgsz}",
         f"project={Path(output_dir).as_posix()}",
         f"name={run_name}",
+        f"device={device}", 
     ]
 
 
     subprocess.Popen(cmd)
-    return f"YOLO training started → {output_dir}/{run_name}"
+    return f"YOLO training started ({device}) → {output_dir}/{run_name}"
     
 
 main_callable = train_yolo_model
