@@ -18,6 +18,23 @@ BG_COLOR = (30, 30, 30)
 BOX_THICKNESS = 2
 FONT_COLOR = (220, 220, 220)
 
+def point_in_polygon(px, py, polygon):
+    """
+    Ray casting algorithm
+    """
+    inside = False
+    n = len(polygon)
+
+    for i in range(n):
+        x1, y1 = polygon[i]
+        x2, y2 = polygon[(i + 1) % n]
+
+        if ((y1 > py) != (y2 > py)) and \
+           (px < (x2 - x1) * (py - y1) / (y2 - y1 + 1e-9) + x1):
+            inside = not inside
+
+    return inside
+
 def detect_corner(mx, my, x, y, w, h):
     corners = {
         "tl": (x, y),
@@ -43,11 +60,11 @@ def get_class_color(cid: int):
 # TOOLTIP TEXT
 # =====================
 TOOLTIP_LINES = [
-    "🖱️ Mouse:",
+    "Mouse:",
     "  Drag        : Draw box",
     "  Click box   : Select box",
     "",
-    "⌨️ Keyboard:",
+    "Keyboard:",
     "  Enter       : Confirm box",
     "  Backspace   : Delete typing",
     "  Delete      : Delete selected box",
@@ -56,21 +73,21 @@ TOOLTIP_LINES = [
     "  Ctrl + Y    : Redo box",
     "  Ctrl + P    : polygon box",
     "",
-    "🧠 Class:",
+    "Class:",
     "  Type name   : Create new class",
     "  ↑ / ↓       : Change class",
     "",
-    "🖼️ Images:",
+    "Images:",
     "  ← / →       : Prev / Next image",
     "  Alt + N     : Next image",
     "",
-    "🚪 Exit:",
+    "Exit:",
     "  ESC         : Exit annotator",
     "  H           : Toggle help",
 ]
 
 
-def draw_tooltip(screen, font, visible=True):
+def draw_tooltip(screen, font, visible, win_w, win_h):
     if not visible:
         return
 
@@ -79,8 +96,8 @@ def draw_tooltip(screen, font, visible=True):
     width = 320
     height = line_h * len(TOOLTIP_LINES) + padding * 2
 
-    x = IMG_WIDTH - width - 10
-    y = IMG_HEIGHT - height - 10
+    x = win_w - width - 10
+    y = win_h - height - 10
 
     # background
     s = pygame.Surface((width, height), pygame.SRCALPHA)
@@ -95,25 +112,108 @@ def draw_tooltip(screen, font, visible=True):
         ty += line_h
 
 
-def draw_class_list(screen, font, class_map, active_class_id):
+def draw_class_list(screen, font, class_map, active_class_id,
+                    scroll, win_w, win_h):
+
     click_areas = []
 
-    x = IMG_WIDTH + 10
-    y = 20
+    sidebar_x = win_w - SIDEBAR_WIDTH
+    area_top = 20
+    area_height = win_h - 220   # พื้นที่สำหรับ class list
+
+    x = sidebar_x + 10
+    y = area_top - scroll
+
+    # ===== Title =====
     title = font.render("CLASSES", True, (255, 255, 255))
-    screen.blit(title, (x, y))
+    screen.blit(title, (x, area_top))
+
     y += 30
 
+    # ===== Class Items =====
     for name, cid in sorted(class_map.items(), key=lambda x: x[1]):
-        rect = pygame.Rect(x, y, SIDEBAR_WIDTH - 20, 22)
-        color = get_class_color(cid)
-        prefix = "▶ " if cid == active_class_id else "  "
-        txt = font.render(f"{prefix}{cid}: {name}", True, color)
-        screen.blit(txt, (x, y))
-        click_areas.append((rect, cid))
+
+        if y > area_top - 30 and y < area_top + area_height:
+
+            rect = pygame.Rect(x, y, SIDEBAR_WIDTH - 25, 22)
+            color = get_class_color(cid)
+            prefix = "> " if cid == active_class_id else "  "
+            txt = font.render(f"{prefix}{cid}: {name}", True, color)
+
+            screen.blit(txt, (x, y))
+            click_areas.append((rect, cid))
+
         y += 24
 
-    return click_areas
+    # ===== Scrollbar =====
+    total_height = len(class_map) * 24
+    max_scroll = max(0, total_height - area_height)
+
+    scrollbar_rect = None
+
+    if max_scroll > 0:
+
+        bar_height = max(
+            40,
+            area_height * area_height // total_height
+        )
+
+        scroll_ratio = scroll / max_scroll if max_scroll else 0
+
+        bar_y = area_top + scroll_ratio * (area_height - bar_height)
+
+        scrollbar_rect = pygame.Rect(
+            sidebar_x + SIDEBAR_WIDTH - 12,
+            bar_y,
+            8,
+            bar_height
+        )
+
+        pygame.draw.rect(
+            screen,
+            (120, 120, 120),
+            scrollbar_rect,
+            border_radius=4
+        )
+
+    return click_areas, scrollbar_rect, max_scroll
+
+def draw_button_scrollbar(screen, scroll, win_w, win_h, total_height):
+
+    sidebar_x = win_w - SIDEBAR_WIDTH
+
+    area_top = win_h - 200
+    area_height = 180
+
+    max_scroll = max(0, total_height - area_height)
+
+    scrollbar_rect = None
+
+    if max_scroll > 0:
+
+        bar_height = max(
+            40,
+            area_height * area_height // total_height
+        )
+
+        scroll_ratio = scroll / max_scroll if max_scroll else 0
+        bar_y = area_top + scroll_ratio * (area_height - bar_height)
+
+        scrollbar_rect = pygame.Rect(
+            sidebar_x + SIDEBAR_WIDTH - 12,
+            bar_y,
+            8,
+            bar_height
+        )
+
+        pygame.draw.rect(
+            screen,
+            (120, 120, 120),
+            scrollbar_rect,
+            border_radius=4
+        )
+
+    return scrollbar_rect, max_scroll
 
 def draw_class_menu(screen, font, menu):
     if not menu:
@@ -130,13 +230,13 @@ def draw_class_menu(screen, font, menu):
 
     return [(r, "delete")]
 
-def draw_confirm_popup(screen, font, data):
+def draw_confirm_popup(screen, font, data, win_w, win_h):
     if not data:
         return []
 
     w, h = 300, 120
-    x = IMG_WIDTH//2 - w//2
-    y = IMG_HEIGHT//2 - h//2
+    x = win_w // 2 - w // 2
+    y = win_h // 2 - h // 2
 
     pygame.draw.rect(screen, (50,50,50), (x,y,w,h))
     pygame.draw.rect(screen, (220,220,220), (x,y,w,h), 2)
@@ -153,6 +253,74 @@ def draw_confirm_popup(screen, font, data):
     screen.blit(font.render("No", True, (255,255,255)), (no.x+30, no.y+5))
 
     return [(yes,"yes"), (no,"no")]
+
+def draw_exit_popup(screen, font, visible, win_w, win_h):
+    if not visible:
+        return []
+
+    w, h = 320, 140
+    x = win_w // 2 - w // 2
+    y = win_h // 2 - h // 2
+
+    pygame.draw.rect(screen, (50,50,50), (x,y,w,h))
+    pygame.draw.rect(screen, (220,220,220), (x,y,w,h), 2)
+
+    screen.blit(font.render("Exit annotation tool?", True, (255,255,255)), (x+60, y+30))
+
+    yes = pygame.Rect(x+50, y+80, 90, 35)
+    no  = pygame.Rect(x+180, y+80, 90, 35)
+
+    pygame.draw.rect(screen, (200,50,50), yes)
+    pygame.draw.rect(screen, (80,80,80), no)
+
+    screen.blit(font.render("Yes", True, (255,255,255)), (yes.x+30, yes.y+8))
+    screen.blit(font.render("No", True, (255,255,255)), (no.x+35, no.y+8))
+
+    return [(yes,"yes"), (no,"no")]
+
+def draw_button(screen, font, rect, text, active=False, disabled=False):
+
+    mouse_pos = pygame.mouse.get_pos()
+    hover = rect.collidepoint(mouse_pos)
+
+    base_color = (60, 60, 60)
+    hover_color = (90, 90, 90)
+    active_color = (70, 140, 255)
+    disabled_color = (40, 40, 40)
+
+    text_color = (255,255,255)
+    if disabled:
+        text_color = (120,120,120)
+
+    # shadow
+    shadow = rect.move(3,3)
+    pygame.draw.rect(screen,(20,20,20),shadow,border_radius=6)
+
+    if disabled:
+        color = disabled_color
+    else:
+        color = base_color
+        if active:
+            color = active_color
+        elif hover:
+            color = hover_color
+
+    pygame.draw.rect(screen,color,rect,border_radius=6)
+
+    # glow
+    if active and not disabled:
+        glow_rect = rect.inflate(6,6)
+        pygame.draw.rect(screen,(100,180,255),glow_rect,2,border_radius=8)
+
+    text_surf = font.render(text,True,text_color)
+
+    screen.blit(
+        text_surf,
+        (
+            rect.centerx - text_surf.get_width()//2,
+            rect.centery - text_surf.get_height()//2
+        )
+    )
 
 def write_data_yaml(dataset_dir: Path, class_map: dict):
     if not class_map:
@@ -206,22 +374,30 @@ def annotate_images_pygame(
     project_dir.mkdir(parents=True, exist_ok=True)
 
     class_map_path = project_dir / "classes.json"
-    class_map = json.loads(class_map_path.read_text()) if class_map_path.exists() else {}
+    class_map = json.loads(class_map_path.read_text(encoding="utf-8")) if class_map_path.exists() else {}
 
     def get_class_id(name):
         if name not in class_map:
             class_map[name] = len(class_map)
-            class_map_path.write_text(json.dumps(class_map, indent=2))
+            class_map_path.write_text(
+                json.dumps(class_map, indent=2, ensure_ascii=False),
+                encoding="utf-8"
+            )
         return class_map[name]
 
     pygame.init()
-    screen = pygame.display.set_mode(WINDOW_SIZE)
+    pygame.key.start_text_input() 
+    screen = pygame.display.set_mode(WINDOW_SIZE, pygame.RESIZABLE)
+    win_w, win_h = WINDOW_SIZE
     pygame.display.set_caption(f"YOLO Annotation Tool [{split}]")
     clock = pygame.time.Clock()
     try:
-        font = pygame.font.SysFont("Segoe UI Emoji", 22)
+        font = pygame.font.Font("NotoSansThai-Regular.ttf", 22)
     except:
-        font = pygame.font.SysFont("Segoe UI", 22)
+        try:
+            font = pygame.font.SysFont("Tahoma", 22)
+        except:
+            font = pygame.font.SysFont("Arial", 22)
 
 
     active_class_id = 0
@@ -237,8 +413,19 @@ def annotate_images_pygame(
         scale = min(IMG_WIDTH / iw, IMG_HEIGHT / ih)
         disp_size = (int(iw * scale), int(ih * scale))
         image_disp = pygame.transform.smoothscale(image, disp_size)
+        # ===== ZOOM VARIABLES =====
+        zoom = 1.0
+        min_zoom = 0.2
+        max_zoom = 5.0
+        draw_mode = "rect"   # rect | polygon
+        offset_x = (win_w - SIDEBAR_WIDTH - disp_size[0]) // 2
+        offset_y = (win_h - disp_size[1]) // 2
+        panning = False
+        pan_start = (0, 0)
+        smooth_centering = False
+        center_speed = 0.12
+
         selected_idx = None
-        polygon_mode = False
         current_polygon = []
 
         boxes = []
@@ -293,25 +480,94 @@ def annotate_images_pygame(
         drawing = False
         label_text = ""
 
-        polygon_mode = False        # โหมดวาด polygon
+        
         current_polygon = []        # จุดของ polygon ปัจจุบัน
 
         resizing = False
         resize_corner = None
         resize_start = None
+        confirm_exit = False
+
+        dragging_vertex = False
+        drag_vertex_idx = None
+
+        class_scroll = 0
+        button_scroll = 0
+
+        class_dragging_scroll = False
+        button_dragging_scroll = False
+
+        class_scrollbar_rect = None
+        button_scrollbar_rect = None
+
+        class_max_scroll = 0
+        button_max_scroll = 0
 
         running = True
         while running:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     return "Exited"
+                
+                if event.type == pygame.VIDEORESIZE:
+                    win_w, win_h = event.w, event.h
+                    screen = pygame.display.set_mode((win_w, win_h), pygame.RESIZABLE)
+
+                    scale = min(
+                        (win_w - SIDEBAR_WIDTH) / iw,
+                        win_h / ih
+                    )
+                    disp_size = (int(iw * scale), int(ih * scale))
+                    image_disp = pygame.transform.smoothscale(image, disp_size)
+
+                    offset_x = (win_w - SIDEBAR_WIDTH - disp_size[0]) // 2
+                    offset_y = (win_h - disp_size[1]) // 2
+
+                # ===== MOUSE WHEEL ZOOM =====
+                if event.type == pygame.MOUSEWHEEL:
+
+                    mx, my = pygame.mouse.get_pos()
+                    sidebar_x = win_w - SIDEBAR_WIDTH
+
+                    # =========================
+                    # ⭐ ถ้า scroll อยู่ใน sidebar
+                    # =========================
+                    if mx > sidebar_x:
+
+                        if my < win_h - 200:
+                            class_scroll -= event.y * 30
+                            class_scroll = max(0, min(class_scroll, class_max_scroll))
+                        else:
+                            button_scroll -= event.y * 30
+                            button_scroll = max(0, min(button_scroll, button_max_scroll))
+
+                    # =========================
+                    # ⭐ ถ้า scroll อยู่บนภาพ → zoom
+                    # =========================
+                    else:
+                        old_zoom = zoom
+
+                        if event.y > 0:
+                            zoom *= 1.1
+                        elif event.y < 0:
+                            zoom *= 0.9
+
+                        zoom = max(min_zoom, min(max_zoom, zoom))
+
+                        scale_change = zoom / old_zoom
+                        offset_x = mx - (mx - offset_x) * scale_change
+                        offset_y = my - (my - offset_y) * scale_change
+
+                    # ถ้า zoom ใกล้ 1 → เปิด smooth center
+                    if event.y < 0 and abs(zoom - 1.0) < 0.05:
+                        zoom = 1.0
+                        smooth_centering = True
 
                 if event.type == pygame.KEYDOWN:
                     mods = pygame.key.get_mods()
 
                     if event.key == pygame.K_ESCAPE:
-                        if polygon_mode:
-                            polygon_mode = False
+                        if draw_mode == "polygon":
                             current_polygon = []
                             continue
                         if confirm_delete:
@@ -322,23 +578,49 @@ def annotate_images_pygame(
                         if class_menu:
                             class_menu = None
                             continue
-                        write_data_yaml(dataset_dir, class_map)
-                        return "Exited"
-                    
-                    elif event.key == pygame.K_RETURN and polygon_mode:
-                        if selected_idx is not None and len(current_polygon) >= 3:
-                            old = boxes[selected_idx]
-                            x, y, w, h, cid = old[:5]
 
-                            push_undo()
-                            boxes[selected_idx] = (
-                                x, y, w, h,
-                                cid,
-                                current_polygon.copy()
+                        confirm_exit = True
+                        continue
+                    
+                    elif event.key == pygame.K_RETURN and draw_mode == "polygon":
+
+                        if len(current_polygon) >= 3:
+                            
+                            # กรณีมี class ใหม่
+                            if label_text.strip():
+                                active_class_id = get_class_id(label_text.strip())
+                                write_data_yaml(dataset_dir, class_map)
+                                label_text = ""
+
+                            # ===== กรณีแก้ไข polygon ของ box เดิม =====
+                            if selected_idx is not None:
+                                old = boxes[selected_idx]
+                                x, y, w, h, cid = old[:5]
+
+                                push_undo()
+                                boxes[selected_idx] = (
+                                    x, y, w, h,
+                                    cid,
+                                    current_polygon.copy()
                                 )
 
-                        current_polygon = []
-                        polygon_mode = False
+                            # ===== กรณีสร้าง polygon ใหม่ =====
+                            else:
+                                xs = [p[0] for p in current_polygon]
+                                ys = [p[1] for p in current_polygon]
+
+                                x = min(xs)
+                                y = min(ys)
+                                w = max(xs) - x
+                                h = max(ys) - y
+
+                                push_undo()
+                                boxes.append(
+                                    (x, y, w, h, active_class_id, current_polygon.copy())
+                                )
+
+                            current_polygon = []
+                       
                    
                     elif event.key == pygame.K_u and mods & pygame.KMOD_CTRL:
                         if undo_stack:
@@ -359,21 +641,18 @@ def annotate_images_pygame(
                         show_help = not show_help
 
                     elif event.key == pygame.K_p and mods & pygame.KMOD_CTRL:
-                        if selected_idx is not None:
-                            polygon_mode = not polygon_mode
-                            current_polygon = []
+                        draw_mode = "polygon" if draw_mode == "rect" else "rect"
+                        current_polygon = []
 
                     elif event.key == pygame.K_LEFT:
                         idx -= 1
                         selected_idx = None
-                        polygon_mode = False
                         current_polygon = []
                         running = False
 
                     elif event.key == pygame.K_RIGHT or (event.key == pygame.K_n and mods & pygame.KMOD_ALT):
                         idx += 1
                         selected_idx = None
-                        polygon_mode = False
                         current_polygon = []
                         running = False
 
@@ -409,11 +688,11 @@ def annotate_images_pygame(
                         selected_idx = None
 
                     elif event.key == pygame.K_RETURN and current_box:
-                        push_undo()  # ⬅️ เก็บก่อนแก้
+                        push_undo()  # เก็บก่อนแก้
                         if label_text.strip():
                             active_class_id = get_class_id(label_text.strip())
-                            write_data_yaml(dataset_dir, class_map)  # ✅ เพิ่มบรรทัดนี้
-                        boxes.append((*current_box, active_class_id, None)) #เพิ่ม
+                            write_data_yaml(dataset_dir, class_map)  
+                        boxes.append((*current_box, active_class_id, None)) 
                         current_box = None
                         label_text = ""
 
@@ -421,20 +700,142 @@ def annotate_images_pygame(
                         label_text = label_text[:-1]
 
                     else:
-                        if event.unicode.isalnum() or event.unicode in "_-":
+                        if event.unicode and event.unicode.isprintable():
                             label_text += event.unicode
 
+                # ===== START PAN =====
+                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 2:
+                    panning = True
+                    pan_start = event.pos
+
+                # ===== STOP PAN =====
+                if event.type == pygame.MOUSEBUTTONUP and event.button == 2:
+                    panning = False
+
+                # ===== PAN MOTION =====
+                if event.type == pygame.MOUSEMOTION and panning:
+                    dx = event.pos[0] - pan_start[0]
+                    dy = event.pos[1] - pan_start[1]
+
+                    offset_x += dx
+                    offset_y += dy
+
+                    pan_start = event.pos
+
                 if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    
+                    if class_scrollbar_rect and class_scrollbar_rect.collidepoint(event.pos):
+                        class_dragging_scroll = True
+                        continue
+
+                    if button_scrollbar_rect and button_scrollbar_rect.collidepoint(event.pos):
+                        button_dragging_scroll = True
+                        continue
+
+                    if confirm_exit:
+                        for r, act in exit_actions:
+                            if r.collidepoint(event.pos):
+                                if act == "yes":
+                                    write_data_yaml(dataset_dir, class_map)
+                                    return "Exited"
+                                else:
+                                    confirm_exit = False
+                                break
+                        continue
+
+                    # ===== UNDO BUTTON =====
+                    if btn_undo.collidepoint(event.pos) and undo_stack:
+                        if undo_stack:
+                            redo_stack.append(copy.deepcopy(boxes))
+                            boxes[:] = undo_stack.pop()
+                        continue
+
+                    # ===== REDO BUTTON =====
+                    if btn_redo.collidepoint(event.pos) and redo_stack:
+                        if redo_stack:
+                            undo_stack.append(copy.deepcopy(boxes))
+                            boxes[:] = redo_stack.pop()
+                        continue
+
+                    if btn_exit.collidepoint(event.pos):
+                        confirm_exit = True
+                        continue
+
+                    if btn_reset.collidepoint(event.pos):
+                        zoom = 1.0
+                        offset_x = (win_w - SIDEBAR_WIDTH - disp_size[0]) // 2
+                        offset_y = (win_h - disp_size[1]) // 2
+                        smooth_centering = False
+                        continue
+
+                    if btn_rect.collidepoint(event.pos):
+                        draw_mode = "rect"
+                        current_polygon = []
+                        continue
+
+                    if btn_poly.collidepoint(event.pos):
+                        draw_mode = "polygon"
+                        current_polygon = []
+                        continue
+
                     mx, my = event.pos
 
-                    if polygon_mode:
+                    # แปลงเป็นพิกัดภาพจริง
+                    mx = (mx - offset_x) / zoom
+                    my = (my - offset_y) / zoom
+
+                    if draw_mode == "polygon":
+
+                        clicked_existing = False
+
+                        # ตรวจว่าคลิกโดน polygon จริงไหม
+                        for i, box in enumerate(boxes):
+                            x, y, w, h, cid = box[:5]
+                            mask = box[5] if len(box) == 6 else None
+
+                            if mask and len(mask) >= 3:
+
+                                # ⭐ ตรวจคลิกโดน vertex ก่อน
+                                for vidx, (vx, vy) in enumerate(mask):
+                                    if abs(mx - vx) < 6 and abs(my - vy) < 6:
+                                        push_undo()
+                                        selected_idx = i
+                                        drag_vertex_idx = vidx
+                                        dragging_vertex = True
+                                        active_class_id = cid
+                                        clicked_existing = True
+                                        break
+
+                                if clicked_existing:
+                                    break
+
+                                if point_in_polygon(mx, my, mask):
+                                    selected_idx = i
+                                    active_class_id = cid
+                                    clicked_existing = True
+                                    break
+
+                        # ถ้าโดนของเดิม → หยุด ไม่สร้าง polygon ใหม่
+                        if clicked_existing:
+                            current_polygon = []
+                            continue
+
+                        # ถ้ามี selected อยู่แล้ว และแค่คลิกพื้นที่ว่าง
+                        # แค่ unselect ไม่ต้องวาดใหม่
+                        if selected_idx is not None:
+                            selected_idx = None
+                            continue
+
+                        # เริ่มวาด polygon ใหม่
+                        if len(current_polygon) == 0:
+                            selected_idx = None
+                        
                         current_polygon.append((mx, my))
-                        continue   # ⬅️ สำคัญมาก กันไม่ให้ไปโดน logic box
+                        continue
 
                     if confirm_delete:
-                        mx, my = event.pos
                         for r, act in confirm_actions:
-                            if r.collidepoint(mx, my):
+                            if r.collidepoint(event.pos):
                                 if act == "yes":
                                     push_undo()
                                     cid = confirm_delete["cid"]
@@ -458,19 +859,21 @@ def annotate_images_pygame(
                                             new_boxes.append((x, y, w, h, c, mask))
 
                                     boxes[:] = new_boxes
-
-                                    class_map_path.write_text(json.dumps(class_map, indent=2))
+                                    class_map_path.write_text(
+                                        json.dumps(class_map, indent=2, ensure_ascii=False),
+                                        encoding="utf-8"
+                                    )
                                     write_data_yaml(dataset_dir, class_map)
                                     active_class_id = 0
                                     selected_idx = None
-                                    
+
                                 confirm_delete = None
                                 break
                         continue
                     
                     if class_menu:
                         for r, act in menu_actions:
-                            if r.collidepoint(mx, my) and act == "delete":
+                            if r.collidepoint(event.pos) and act == "delete":
                                 confirm_delete = {"cid": class_menu["cid"]}
                                 class_menu = None
                                 drawing = False       
@@ -496,9 +899,9 @@ def annotate_images_pygame(
                             break
 
                         #ถ้าไม่โดน box → เริ่มวาดใหม่
-                    if selected_idx is None:
+                    if selected_idx is None and draw_mode == "rect":
                         drawing = True
-                        start_pos = event.pos
+                        start_pos = (mx, my)
                         current_box = None
 
 
@@ -518,62 +921,167 @@ def annotate_images_pygame(
                     if resizing:
                         resizing = False
                         resize_corner = None
+                    if dragging_vertex:
+                        dragging_vertex = False
+                        drag_vertex_idx = None
+                    class_dragging_scroll = False
+                    button_dragging_scroll = False
 
-                if event.type == pygame.MOUSEMOTION and drawing:
-                    x1, y1 = start_pos
-                    x2, y2 = event.pos
-                    current_box = (min(x1,x2), min(y1,y2), abs(x2-x1), abs(y2-y1))
+                # ======================================
+                # ⭐ MOUSE MOTION HANDLER (รวมทั้งหมด)
+                # ======================================
+                if event.type == pygame.MOUSEMOTION:
 
-                if event.type == pygame.MOUSEMOTION and resizing and selected_idx is not None:
-                    x, y, w, h, c = boxes[selected_idx][:5]
-                    mx, my = event.pos
-                    sx, sy = resize_start
-                    dx = mx - sx
-                    dy = my - sy
-    
-                    if resize_corner == "br":
-                        w = max(5, w + dx)
-                        h = max(5, h + dy)
+                    # =========================
+                    # Scrollbar Drag
+                    # =========================
+                    if class_dragging_scroll and class_scrollbar_rect:
 
-                    elif resize_corner == "tr":
-                        y += dy
-                        h = max(5, h - dy)
-                        w = max(5, w + dx)
+                        mouse_y = event.pos[1]
 
-                    elif resize_corner == "bl":
-                        x += dx
-                        w = max(5, w - dx)
-                        h = max(5, h + dy)
+                        area_height = win_h - 220
+                        bar_travel = area_height - class_scrollbar_rect.height
 
-                    elif resize_corner == "tl":
-                        x += dx
-                        y += dy
-                        w = max(5, w - dx)
-                        h = max(5, h - dy)
+                        relative = mouse_y - 20
+                        relative = max(0, min(relative, bar_travel))
 
-                    w = max(5, w)
-                    h = max(5, h)
-                    old = boxes[selected_idx]
-                    ox, oy, ow, oh, c, mask = old
+                        ratio = relative / bar_travel if bar_travel else 0
+                        class_scroll = ratio * class_max_scroll
 
-                    new_mask = None
-                    if mask:
-                        sx = w / ow
-                        sy = h / oh
-                        new_mask = [
-                            (
-                                x + (px - ox) * sx,
-                                y + (py - oy) * sy
-                            )
-                            for px, py in mask
-                        ]
+                        continue  # ⭐ กันชน logic อื่น
 
-                    boxes[selected_idx] = (x, y, w, h, c, new_mask)
+                    if button_dragging_scroll and button_scrollbar_rect:
 
-                    resize_start = (mx, my)
+                        mouse_y = event.pos[1]
+
+                        button_area_top = win_h - 200
+                        button_area_height = 180
+                        bar_travel = button_area_height - button_scrollbar_rect.height
+
+                        relative = mouse_y - button_area_top
+                        relative = max(0, min(relative, bar_travel))
+
+                        ratio = relative / bar_travel if bar_travel else 0
+                        button_scroll = ratio * button_max_scroll
+
+                        continue
+
+
+                    # =========================
+                    # Panning (กลางเมาส์)
+                    # =========================
+                    if panning:
+                        dx = event.pos[0] - pan_start[0]
+                        dy = event.pos[1] - pan_start[1]
+
+                        offset_x += dx
+                        offset_y += dy
+
+                        pan_start = event.pos
+                        continue
+
+
+                    # =========================
+                    # Drawing Rect
+                    # =========================
+                    if drawing:
+                        x1, y1 = start_pos
+
+                        x2 = (event.pos[0] - offset_x) / zoom
+                        y2 = (event.pos[1] - offset_y) / zoom
+
+                        current_box = (
+                            min(x1, x2),
+                            min(y1, y2),
+                            abs(x2 - x1),
+                            abs(y2 - y1)
+                        )
+                        continue
+
+
+                    # =========================
+                    # Resize Rect
+                    # =========================
+                    if resizing and selected_idx is not None:
+
+                        mx = (event.pos[0] - offset_x) / zoom
+                        my = (event.pos[1] - offset_y) / zoom
+
+                        x, y, w, h, c = boxes[selected_idx][:5]
+                        ox, oy, ow, oh, c, mask = boxes[selected_idx]
+
+                        dx = mx - resize_start[0]
+                        dy = my - resize_start[1]
+
+                        if resize_corner == "br":
+                            w = max(5, w + dx)
+                            h = max(5, h + dy)
+
+                        elif resize_corner == "tr":
+                            y += dy
+                            h = max(5, h - dy)
+                            w = max(5, w + dx)
+
+                        elif resize_corner == "bl":
+                            x += dx
+                            w = max(5, w - dx)
+                            h = max(5, h + dy)
+
+                        elif resize_corner == "tl":
+                            x += dx
+                            y += dy
+                            w = max(5, w - dx)
+                            h = max(5, h - dy)
+
+                        new_mask = None
+                        if mask:
+                            sx = w / ow
+                            sy = h / oh
+                            new_mask = [
+                                (x + (px - ox) * sx,
+                                y + (py - oy) * sy)
+                                for px, py in mask
+                            ]
+
+                        boxes[selected_idx] = (x, y, w, h, c, new_mask)
+                        resize_start = (mx, my)
+
+                        continue
+
+
+                    # =========================
+                    # Drag Polygon Vertex
+                    # =========================
+                    if dragging_vertex and selected_idx is not None:
+
+                        mx = (event.pos[0] - offset_x) / zoom
+                        my = (event.pos[1] - offset_y) / zoom
+
+                        x, y, w, h, cid = boxes[selected_idx][:5]
+                        mask = boxes[selected_idx][5]
+
+                        new_mask = mask.copy()
+                        new_mask[drag_vertex_idx] = (mx, my)
+
+                        xs = [p[0] for p in new_mask]
+                        ys = [p[1] for p in new_mask]
+
+                        nx = min(xs)
+                        ny = min(ys)
+                        nw = max(xs) - nx
+                        nh = max(ys) - ny
+
+                        boxes[selected_idx] = (nx, ny, nw, nh, cid, new_mask)
+
+                        continue
 
             screen.fill(BG_COLOR)
-            screen.blit(image_disp, (0, 0))
+            scaled_img = pygame.transform.smoothscale(
+            image_disp,
+            (int(disp_size[0] * zoom), int(disp_size[1] * zoom))
+            )
+
+            screen.blit(scaled_img, (offset_x, offset_y))
 
             for i, box in enumerate(boxes):
                 if len(box) == 5:
@@ -583,60 +1091,182 @@ def annotate_images_pygame(
                     x, y, w, h, cid, mask = box
 
                 color = (255, 255, 0) if i == selected_idx else get_class_color(cid)
-                pygame.draw.rect(screen, color, (x, y, w, h), BOX_THICKNESS)
+                pygame.draw.rect(
+                    screen,
+                    color,
+                    (
+                        x * zoom + offset_x,
+                        y * zoom + offset_y,
+                        w * zoom,
+                        h * zoom
+                    ),
+                    BOX_THICKNESS
+                )
 
                 # =========================
                 # DRAW SAVED POLYGON
                 # =========================
-                if i == selected_idx and mask and len(mask) >= 3:
+                if mask and len(mask) >= 3:
+                    scaled_mask = [
+                        (px * zoom + offset_x, py * zoom + offset_y)
+                        for px, py in mask
+                    ]
+
                     pygame.draw.polygon(
                         screen,
-                        get_class_color(cid),
-                        mask,
-                        2
+                        color,
+                        scaled_mask,
+                        2  
                     )
+                    # วาด vertex handle
+                    if i == selected_idx:
+                        for vx, vy in scaled_mask:
+                            pygame.draw.circle(screen, (255,255,255), (int(vx), int(vy)), 5)
+                
                 # วาด resize handle (4 มุม)
                 # ===============================ห
                 if i == selected_idx:
                     for px, py in [
-                        (x, y),               # TL
-                        (x + w, y),           # TR
-                        (x, y + h),           # BL
-                        (x + w, y + h),       # BR
+                        (x, y),
+                        (x + w, y),
+                        (x, y + h),
+                        (x + w, y + h),
                     ]:
+                        sx = px * zoom + offset_x
+                        sy = py * zoom + offset_y
+
                         pygame.draw.rect(
                             screen,
                             (255, 255, 255),
                             (
-                                px - HANDLE_SIZE // 2,
-                                py - HANDLE_SIZE // 2,
+                                sx - HANDLE_SIZE // 2,
+                                sy - HANDLE_SIZE // 2,
                                 HANDLE_SIZE,
                                 HANDLE_SIZE,
                             )
                         )
+
             if current_box:
-                pygame.draw.rect(screen, (255,255,0), current_box, 1)
+                x, y, w, h = current_box
+
+                pygame.draw.rect(
+                    screen,
+                    (255,255,0),
+                    (
+                        x * zoom + offset_x,
+                        y * zoom + offset_y,
+                        w * zoom,
+                        h * zoom
+                    ),
+                    1
+                )
 
             info = font.render(f"{idx+1}/{len(image_paths)} | Boxes:{len(boxes)} | Typing:{label_text}", True, FONT_COLOR)
-            screen.blit(info, (10, IMG_HEIGHT - 28))
+            screen.blit(info, (10, win_h - 28))
 
-            class_clicks = draw_class_list(screen, font, class_map, active_class_id)
+            # ===== Draw Sidebar Background =====
+            sidebar_x = win_w - SIDEBAR_WIDTH
+
+            pygame.draw.rect(
+                screen,
+                (25, 25, 25),   # สีพื้นหลัง sidebar
+                (sidebar_x, 0, SIDEBAR_WIDTH, win_h)
+            )
+
+            class_clicks, class_scrollbar_rect, class_max_scroll = \
+                draw_class_list(
+                    screen,
+                    font,
+                    class_map,
+                    active_class_id,
+                    class_scroll,
+                    win_w,
+                    win_h
+                )
             menu_actions = draw_class_menu(screen, font, class_menu)
-            confirm_actions = draw_confirm_popup(screen, font, confirm_delete)
-            draw_tooltip(screen, font, show_help)
+            confirm_actions = draw_confirm_popup(screen, font, confirm_delete, win_w, win_h)
+            exit_actions = draw_exit_popup(screen, font, confirm_exit, win_w, win_h)
 
             # =========================
             # DRAW CURRENT POLYGON (preview)
             # =========================
-            if polygon_mode and len(current_polygon) >= 2:
+            if draw_mode == "polygon" and len(current_polygon) >= 2:
+                scaled_preview = [
+                    (px * zoom + offset_x, py * zoom + offset_y)
+                    for px, py in current_polygon
+                ]
+
                 pygame.draw.lines(
                     screen,
                     (0, 255, 255),
                     False,
-                    current_polygon,
+                    scaled_preview,
                     2
                 )
 
+            # ===== SMOOTH CENTER BACK =====
+            if smooth_centering and zoom == 1.0:
+                target_x = (win_w - SIDEBAR_WIDTH - disp_size[0]) // 2
+                target_y = (win_h - disp_size[1]) // 2
+
+                offset_x += (target_x - offset_x) * center_speed
+                offset_y += (target_y - offset_y) * center_speed
+
+                if abs(target_x - offset_x) < 0.5 and abs(target_y - offset_y) < 0.5:
+                    offset_x = target_x
+                    offset_y = target_y
+                    smooth_centering = False
+
+            # =========================
+            # ⭐ Button Scroll Area Setup
+            # =========================
+
+            button_area_top = win_h - 200
+            button_area_height = 180
+
+            button_total_height = 6 * 40   
+
+            # =========================
+            # ⭐ สร้างปุ่มใหม่ทุก frame (รองรับ resize)
+            # =========================
+            base_y = button_area_top - button_scroll
+
+            btn_undo = pygame.Rect(win_w - SIDEBAR_WIDTH + 20, base_y + 20, 90, 32)
+            btn_redo = pygame.Rect(win_w - SIDEBAR_WIDTH + 115, base_y + 20, 90, 32)
+
+            btn_reset = pygame.Rect(win_w - SIDEBAR_WIDTH + 20, base_y + 60, 180, 32)
+            btn_rect  = pygame.Rect(win_w - SIDEBAR_WIDTH + 20, base_y + 100, 180, 32)
+            btn_poly  = pygame.Rect(win_w - SIDEBAR_WIDTH + 20, base_y + 140, 180, 32)
+            btn_exit  = pygame.Rect(win_w - SIDEBAR_WIDTH + 20, base_y + 180, 180, 32)
+
+            clip_rect = pygame.Rect(
+                win_w - SIDEBAR_WIDTH,
+                button_area_top,
+                SIDEBAR_WIDTH,
+                button_area_height
+            )
+            screen.set_clip(clip_rect)
+
+            draw_button(screen, font, btn_undo, "Undo", disabled=(len(undo_stack)==0))
+            draw_button(screen, font, btn_redo, "Redo", disabled=(len(redo_stack)==0))
+
+            draw_button(screen, font, btn_reset, "RESET VIEW")
+            draw_button(screen, font, btn_rect, "RECT MODE", active=(draw_mode=="rect"))
+            draw_button(screen, font, btn_poly, "POLYGON MODE", active=(draw_mode=="polygon"))
+            draw_button(screen, font, btn_exit, "EXIT")
+
+            screen.set_clip(None)
+
+            button_scrollbar_rect, button_max_scroll = draw_button_scrollbar(
+                screen,
+                button_scroll,
+                win_w,
+                win_h,
+                button_total_height
+            )
+            
+            draw_tooltip(screen, font, show_help, win_w, win_h)
+            
             pygame.display.flip()
             clock.tick(60)
 
