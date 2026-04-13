@@ -1,6 +1,6 @@
 import subprocess
 from pathlib import Path
-
+import torch
 
 def yolo_inference_node(
     image_dir: {
@@ -46,6 +46,8 @@ def yolo_inference_node(
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    device = "0" if torch.cuda.is_available() else "cpu"
+
     cmd = [
         "yolo",
         f"task={task}",
@@ -57,6 +59,7 @@ def yolo_inference_node(
         f"project={output_dir.as_posix()}",
         f"name={run_name}",
         "save=True",
+        f"device={device}", 
     ]
 
     if task == "segment":
@@ -68,6 +71,6 @@ def yolo_inference_node(
     subprocess.Popen(cmd)
 
     # ส่ง path ของโฟลเดอร์ผลลัพธ์ออกไป
-    return output_dir / run_name
+    return f"Inference started ({device}) → {output_dir / run_name}"
 
 main_callable = yolo_inference_node
