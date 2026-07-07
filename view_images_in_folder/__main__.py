@@ -8,9 +8,8 @@ def view_images_popup(
         'type': object,   # รับ list จาก node ก่อนหน้า
     },
 ):
-    # --------------------------------
-    # normalize input (Nodezator อาจส่ง list ซ้อน)
-    # --------------------------------
+    
+    # normalize input 
     if isinstance(image_paths, (list, tuple)) and image_paths:
         if isinstance(image_paths[0], (list, tuple)):
             image_paths = image_paths[0]
@@ -31,9 +30,7 @@ def view_images_popup(
     if not images:
         return None
 
-    # --------------------------------
     # open popup window
-    # --------------------------------
     screen = pygame.display.set_mode((900, 700))
     pygame.display.set_caption("Image Viewer (ESC to close)")
 
