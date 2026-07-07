@@ -17,5 +17,3 @@
 - Perform real-time detection using a camera
 
 ## Demo Video : https://youtu.be/8zxbwvHwdTI
-
-![Annotation](C:\Users\TUF\OneDrive\รูปภาพ\ภาพหน้าจอ\Screenshot 2026-07-08 004156.png)
