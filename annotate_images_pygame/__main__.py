@@ -5,9 +5,7 @@ import colorsys
 import copy
 import yaml
 
-# =====================
 # CONFIG
-# =====================
 HANDLE_SIZE = 8
 IMG_WIDTH = 900
 IMG_HEIGHT = 700
@@ -47,18 +45,13 @@ def detect_corner(mx, my, x, y, w, h):
             return name
     return None
 
-# =====================
 # COLOR GENERATOR
-# =====================
 def get_class_color(cid: int):
     hue = (cid * 0.61803398875) % 1.0
     r, g, b = colorsys.hsv_to_rgb(hue, 0.85, 1.0)
     return int(r * 255), int(g * 255), int(b * 255)
 
-
-# =====================
 # TOOLTIP TEXT
-# =====================
 TOOLTIP_LINES = [
     "Mouse:",
     "  Drag        : Draw box",
@@ -344,9 +337,7 @@ def write_data_yaml(dataset_dir: Path, class_map: dict):
         encoding="utf-8"
     )
 
-# =====================
 # MAIN TOOL
-# =====================
 def annotate_images_pygame(
     image_paths: list = [],
 
