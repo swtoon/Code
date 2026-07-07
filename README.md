@@ -1,22 +1,21 @@
-Visual Python Programming Workflow for Image Detection
+## Visual Python Programming Workflow for Image Detection
+
+## Technologies
 - Python
-- YOLOv8
+- YOLOv8 (Ultralytics)
 - OpenCV
+- PyTorch
 - Nodezator
 
-Features
-- Image dataset preparation
-- Image annotation and labeling
-- model training and validation
-- Object detection on images
-- Object detection on videos
-- Real-time object detection using a camera
+## Features
+- Prepare image dataset
+- Annotate and label images
+- Train a custom YOLOv8 model
+- Validate model performance
+- Perform inference on images
+- Perform inference on videos
+- Perform real-time detection using a camera
 
 ## Demo Video : https://youtu.be/8zxbwvHwdTI
 
-## Installation
-
-1. Download the Project_Detect ZIP file.
-2. Extract the ZIP file.
-3. Install the required dependencies.
-4. Run the project.
+![Annotation](C:\Users\TUF\OneDrive\รูปภาพ\ภาพหน้าจอ\Screenshot 2026-07-08 004156.png)
